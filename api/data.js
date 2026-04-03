@@ -1,6 +1,4 @@
 // api/data.js — Vercel serverless function (CommonJS)
-// JSONBIN_KEY and JSONBIN_BIN_ID are set in Vercel environment variables.
-// They are never visible in your GitHub source code or the browser.
 
 const API_KEY  = process.env.JSONBIN_KEY;
 const BIN_ID   = process.env.JSONBIN_BIN_ID;
@@ -16,6 +14,12 @@ module.exports = async function handler(req, res) {
     return res.status(500).json({ error: 'JSONBIN_KEY is not set in Vercel environment variables' });
   }
 
+  // Send both header variants to cover all JSONBin key types
+  const authHeaders = {
+    'X-Master-Key': API_KEY,
+    'X-Access-Key': API_KEY
+  };
+
   // ── GET — load all data ──
   if (req.method === 'GET') {
     if (!BIN_ID) {
@@ -23,9 +27,13 @@ module.exports = async function handler(req, res) {
     }
     try {
       const response = await fetch(`${BASE_URL}/b/${BIN_ID}/latest`, {
-        headers: { 'X-Master-Key': API_KEY }
+        headers: authHeaders
       });
-      if (!response.ok) throw new Error(`JSONBin GET failed: ${response.status}`);
+      if (!response.ok) {
+        const text = await response.text();
+        console.error('GET failed:', response.status, text);
+        throw new Error(`JSONBin GET failed: ${response.status} — ${text}`);
+      }
       const json = await response.json();
       return res.status(200).json(json.record);
     } catch (e) {
@@ -44,11 +52,15 @@ module.exports = async function handler(req, res) {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'X-Master-Key': API_KEY
+          ...authHeaders
         },
         body: JSON.stringify(req.body)
       });
-      if (!response.ok) throw new Error(`JSONBin PUT failed: ${response.status}`);
+      if (!response.ok) {
+        const text = await response.text();
+        console.error('PUT failed:', response.status, text);
+        throw new Error(`JSONBin PUT failed: ${response.status} — ${text}`);
+      }
       return res.status(200).json({ ok: true });
     } catch (e) {
       console.error('POST error:', e.message);
